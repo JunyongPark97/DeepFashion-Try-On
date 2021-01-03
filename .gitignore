@@ -1,0 +1,6 @@
+ACGPN_train/train_data/
+ACGPN_train/models/*.pth
+ACGPN_train/runs/
+ACGPN_inference/runs/
+*.pyc
+*.pth
