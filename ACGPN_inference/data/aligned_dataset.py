@@ -172,7 +172,7 @@ class AlignedDataset(BaseDataset):
         pose_name =B_path.replace('.jpg', '_keypoints.json').replace('test_img','test_pose')
         with open(osp.join(pose_name), 'r') as f:
             pose_label = json.load(f)
-            pose_data = pose_label['people'][0]['pose_keypoints']
+            pose_data = pose_label['people'][0]['pose_keypoints_2d']
             pose_data = np.array(pose_data)
             pose_data = pose_data.reshape((-1,3))
 

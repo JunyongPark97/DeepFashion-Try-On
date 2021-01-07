@@ -1,6 +1,10 @@
+import json
+import math
+
 import numpy as np
 import torch
 import os
+import os.path as osp
 from torch.autograd import Variable
 from util.image_pool import ImagePool
 import torch.nn as nn
@@ -280,8 +284,72 @@ class Pix2PixHDModel(BaseModel):
         out+=smaller*fake_c
         out+=(1-mask)*fake_img
         return out
+    def create_arm_label(self, pose_path, label, all_clothes_label, warped_mask):
+        with open(pose_path, 'r') as f:
+            pose_label = json.load(f)
+            pose_data = pose_label['people'][0]['pose_keypoints_2d']
+            pose_data = np.array(pose_data)
+        point_left_shoulder_x = math.floor(pose_data[6])
+        point_right_shoulder_x = math.floor(pose_data[15])
+        point_neck_y = math.floor(pose_data[4])
+        point_neck_x = math.floor(pose_data[3])
+        point_hip_y = math.floor((pose_data[25] + pose_data[34]) / 2)
+        point_belly_y = math.floor((2*point_hip_y + point_neck_y)/3)
+        print(all_clothes_label[0][0][80])
+        clothes_mask = torch.FloatTensor((all_clothes_label.cpu().numpy()==4).astype(np.float)).cuda()
+        new_arm1_mask = torch.FloatTensor((all_clothes_label.cpu().numpy()==4).astype(np.float)).cuda()
+        new_arm2_mask = torch.FloatTensor((all_clothes_label.cpu().numpy()==4).astype(np.float)).cuda()
+        new_bottom_mask = torch.FloatTensor((all_clothes_label.cpu().numpy()==4).astype(np.float)).cuda()
+        print(clothes_mask[0][0][80])
+        # new_arm2_mask[0, 0, :, point_neck_x:] = 0
+        for i in range(0, 256) :
+            for j in range(0 , point_neck_x) :
+                new_arm2_mask[0][0][i][j] = 0
+
+        print(new_arm1_mask[0][0][80])
+        print(new_arm2_mask[0][0][80])
+        for i in range(0, 256):
+            for j in range(0, point_left_shoulder_x):
+                new_bottom_mask[0][0][i][j] = 0
+
+        # new_bottom_mask[0, 0, :, :point_left_shoulder_x] = 0
+        for i in range(0, 256):
+            for j in range(point_right_shoulder_x, 192):
+                new_bottom_mask[0][0][i][j] = 0
+        # new_bottom_mask[0, 0, :, point_right_shoulder_x:] = 0
+        for i in range(0, point_belly_y):
+            for j in range(0, 192):
+                new_bottom_mask[0][0][i][j] = 0
+        # new_bottom_mask[0, 0, :point_belly_y, :] = 0
+        label = label*(1-clothes_mask) + (new_arm1_mask*11)
+        print(label[0][0][80])
+        label = label * (1 - new_arm2_mask) + (new_arm2_mask * 13)
+        print(label[0][0][80])
+        label = label * (1 - new_bottom_mask) + (new_bottom_mask * 8)
+        print(label[0][0][80])
+
+        label = label * (1-warped_mask)
+
+        print(label[0][0][80])
+
+        input_label = torch.cuda.FloatTensor(torch.Size((1,14,256,192))).zero_()
+        input_label = input_label.scatter_(1, label.data.long().cuda(), 1.0)
+
+        return input_label
     def forward(self, label, pre_clothes_mask, img_fore, clothes_mask, clothes, all_clothes_label, real_image, pose,grid,mask_fore):
+        ##new code
+        img = Image.open('/home/dltkddn0323/ACGPN/DeepFashion_Try_On/Data_preprocessing/test_warped_mask/mask_re.png')
+        w_mask = np.asarray(img)
+        w_mask = torch.from_numpy(w_mask).cuda()
+        w_mask = (w_mask / 255)
+        w_mask = w_mask.view(1, 1, 256, 192)
+
+        print(label[0][0][80])
+        new_g1 = self.create_arm_label('/home/dltkddn0323/ACGPN/DeepFashion_Try_On/Data_preprocessing/test_pose/model_re_keypoints.json', label, all_clothes_label, w_mask)
+        ##
+
         # Encode Inputs
+
         input_label, masked_label, all_clothes_label = self.encode_input(label, clothes_mask, all_clothes_label)
         arm1_mask = torch.FloatTensor((label.cpu().numpy() == 11).astype(np.float)).cuda()
         arm2_mask = torch.FloatTensor((label.cpu().numpy() == 13).astype(np.float)).cuda()
@@ -296,6 +364,8 @@ class Pix2PixHDModel(BaseModel):
         arm_label = self.sigmoid(arm_label)
         CE_loss = self.cross_entropy2d(arm_label, (label * (1 - clothes_mask)).transpose(0, 1)[0].long()) * 10
 
+        # print(arm_label.shape)
+        arm_label = new_g1
         armlabel_map = generate_discrete_label(arm_label.detach(), 14, False)
         armlabel_map_d = armlabel_map.cpu()
         dis_label = generate_discrete_label(arm_label.detach(), 14)
@@ -306,19 +376,16 @@ class Pix2PixHDModel(BaseModel):
 
         fake_cl_dis = torch.FloatTensor((fake_cl.detach().cpu().numpy() > 0.5).astype(np.float)).cuda()
         fake_cl_dis=morpho(fake_cl_dis,1,True)
-        print(fake_cl_dis.cpu().size())
+        asdfasdfad = fake_cl_dis[0][0][100]
+        # print(asdfasdfad)
+        # print(fake_cl_dis.cpu().size())
 
         # #######################################################################
-        # # 바꿔치기
-        img = Image.open('/home/dltkddn0323/ACGPN/DeepFashion_Try_On/Data_preprocessing/test_warped_mask/model_cut.png')
-        w_mask = np.asarray(img)
-        w_mask = torch.from_numpy(w_mask).cuda()
-        w_mask = (w_mask / 255 ) * 3
-        w_mask = w_mask.view(1, 1, 256, 192)
+        # 바꿔치기
+
         fake_cl_dis = w_mask
         print(fake_cl_dis.cpu().size())
         # #######################################################################
-
 
         arm_np = armlabel_map_d.numpy()
         print(np.where(arm_np<0))
@@ -339,6 +406,8 @@ class Pix2PixHDModel(BaseModel):
         armlabel_map = armlabel_map * (1 - arm2_full) + arm2_full * 13
         armlabel_map*=(1-fake_cl_dis)
         dis_label=encode(armlabel_map,armlabel_map.shape)
+
+
 
         fake_c, warped, warped_mask,warped_grid= self.Unet(clothes, fake_cl_dis, pre_clothes_mask,grid)
         mask=fake_c[:,3,:,:]
@@ -365,7 +434,7 @@ class Pix2PixHDModel(BaseModel):
 
         return [self.loss_filter(loss_G_GAN, 0, loss_G_VGG, loss_D_real, loss_D_fake), fake_image,
                 clothes, arm_label
-            , L1_loss, style_loss, fake_cl, CE_loss,real_image,warped_grid]
+            , L1_loss, style_loss, fake_cl_dis, CE_loss,real_image,warped_grid]
 
     def inference(self, label, label_ref, image_ref):
 
