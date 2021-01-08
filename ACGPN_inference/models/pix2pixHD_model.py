@@ -405,9 +405,10 @@ class Pix2PixHDModel(BaseModel):
         armlabel_map = armlabel_map * (1 - arm1_full) + arm1_full * 11
         armlabel_map = armlabel_map * (1 - arm2_full) + arm2_full * 13
         armlabel_map*=(1-fake_cl_dis)
+        arm_label = new_g1
         dis_label=encode(armlabel_map,armlabel_map.shape)
 
-
+        fake_cl_dis = w_mask
 
         fake_c, warped, warped_mask,warped_grid= self.Unet(clothes, fake_cl_dis, pre_clothes_mask,grid)
         mask=fake_c[:,3,:,:]
