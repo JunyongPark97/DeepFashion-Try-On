@@ -338,14 +338,14 @@ class Pix2PixHDModel(BaseModel):
         return input_label
     def forward(self, label, pre_clothes_mask, img_fore, clothes_mask, clothes, all_clothes_label, real_image, pose,grid,mask_fore):
         ##new code
-        img = Image.open('/home/dltkddn0323/ACGPN/DeepFashion_Try_On/Data_preprocessing/test_warped_mask/mask_re.png')
+        img = Image.open(os.getenv('HOME') + '/ACGPN/DeepFashion_Try_On/Data_preprocessing/test_warped_mask/mask_re.png')
         w_mask = np.asarray(img)
         w_mask = torch.from_numpy(w_mask).cuda()
         w_mask = (w_mask / 255)
         w_mask = w_mask.view(1, 1, 256, 192)
 
         print(label[0][0][80])
-        new_g1 = self.create_arm_label('/home/dltkddn0323/ACGPN/DeepFashion_Try_On/Data_preprocessing/test_pose/model_re_keypoints.json', label, all_clothes_label, w_mask)
+        new_g1 = self.create_arm_label(os.getenv('HOME')+'/ACGPN/DeepFashion_Try_On/Data_preprocessing/test_pose/model_re_keypoints.json', label, all_clothes_label, w_mask)
         ##
 
         # Encode Inputs
